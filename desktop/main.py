@@ -1,132 +1,129 @@
-from tkinter import *
 import customtkinter as ctk
 from tkinter import messagebox
-import mysql.connector
+import requests
 import webbrowser
 
-# variable frame
+# Set tema (Opsional agar lebih modern)
+ctk.set_appearance_mode("dark") 
+ctk.set_default_color_theme("blue")
 
-root = ctk.CTk()
-root.geometry("500x500")
-root.title("Report Page")
+class App(ctk.CTk):
+    def __init__(self):
+        super().__init__()
 
-# judul frame
+        # Konfigurasi Window
+        self.title("LABHUB - FASTIKOM")
+        self.geometry("500x450")
 
-title_label = ctk.CTkLabel(root,text="PELAPORAN KENDALA JARINGAN LABKOM", font= ctk.CTkFont(size=20, weight="bold"))
-title_label.pack(padx=10, pady=(50,0))
+        # Judul
+        self.title_label = ctk.CTkLabel(self, text="PELAPORAN KENDALA LABKOM", 
+                                        font=ctk.CTkFont(size=18, weight="bold"))
+        self.title_label.pack(padx=10, pady=(40, 30))
 
-# variable combo box
+        # Data Pilihan
+        pilihan_kelas = ["MALAM", "PAGI"]
+        pilihan_lab = ["LAB1", "LAB2"]
 
-pilihan1 = ["MALAM","PAGI"]
-pilihan2 = ["LAB1","LAB2"]
+        # Container untuk Form (Agar lebih rapi daripada .place)
+        self.form_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.form_frame.pack(padx=100, fill="both", expand=True)
 
-# connection
+        # UI Elements (Menggunakan Grid di dalam frame agar presisi)
+        self.create_label_entry("Nama :", 0)
+        self.entry_nama = ctk.CTkEntry(self.form_frame, width=220)
+        self.entry_nama.grid(row=0, column=1, pady=10)
 
-connection = mysql.connector.connect(host="localhost", user="root", password="", port="3306", database="main")
-c = connection.cursor()
+        self.create_label_entry("NIM :", 1)
+        self.entry_nim = ctk.CTkEntry(self.form_frame, width=220)
+        self.entry_nim.grid(row=1, column=1, pady=10)
 
+        self.create_label_entry("Kelas :", 2)
+        self.entry_kelas = ctk.CTkComboBox(self.form_frame, width=220, values=pilihan_kelas)
+        self.entry_kelas.grid(row=2, column=1, pady=10)
 
+        self.create_label_entry("LAB :", 3)
+        self.entry_lab = ctk.CTkComboBox(self.form_frame, width=220, values=pilihan_lab)
+        self.entry_lab.grid(row=3, column=1, pady=10)
 
-# Label
+        self.create_label_entry("Keluhan :", 4)
+        self.entry_keluhan = ctk.CTkEntry(self.form_frame, width=220)
+        self.entry_keluhan.grid(row=4, column=1, pady=10)
 
+        # Button Container
+        self.btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.btn_frame.pack(pady=30)
 
-label_nama = ctk.CTkLabel(root, text="Nama :")
-label_nim = ctk.CTkLabel(root, text="NIM :")
-label_kelas = ctk.CTkLabel(root, text="Kelas :")
-label_lab = ctk.CTkLabel(root, text="LAB :")
-label_keluhan = ctk.CTkLabel(root, text="Keluhan :")
+        self.btn_kirim = ctk.CTkButton(self.btn_frame, width=120, text="KIRIM", 
+                                       command=self.handle_insert)
+        self.btn_kirim.grid(row=0, column=0, padx=10)
 
+        self.btn_lihat = ctk.CTkButton(self.btn_frame, width=120, text="LIHAT DATA", 
+                                       fg_color="transparent", border_width=2,
+                                       command=self.lihat_data)
+        self.btn_lihat.grid(row=0, column=1, padx=10)
 
-# Entry
+    def create_label_entry(self, text, row):
+        label = ctk.CTkLabel(self.form_frame, text=text, anchor="w")
+        label.grid(row=row, column=0, sticky="w", padx=(0, 20))
 
+    def handle_insert(self):
+        # Ambil data
+        nama = self.entry_nama.get().strip()
+        nim = self.entry_nim.get().strip()
+        keluhan = self.entry_keluhan.get().strip()
+        
+        # 1. Validasi Field Kosong
+        if not nama or not nim or not keluhan:
+            messagebox.showerror("Error", "Semua field (Nama, NIM, Keluhan) wajib diisi!")
+            return
 
-entry_nama = ctk.CTkEntry(root, width=200)
-entry_nim = ctk.CTkEntry(root, width=200)
-entry_kelas = ctk.CTkComboBox(root, width=200, values=pilihan1)
-entry_lab = ctk.CTkComboBox(root, width=200, values=pilihan2)
-entry_keluhan = ctk.CTkEntry(root, width=200)
+        # 2. Validasi Nama (Hanya huruf dan spasi)
+        # Kita hilangkan spasi sementara untuk pengecekan .isalpha()
+        if not nama.replace(" ", "").isalpha():
+            messagebox.showerror("Validation Error", "Nama hanya boleh berisi huruf!")
+            return
 
+        # 3. Validasi NIM (Hanya angka)
+        if not nim.isdigit():
+            messagebox.showerror("Validation Error", "NIM hanya boleh berisi angka!")
+            return
 
-# Layout
+        # Jika lolos validasi, baru kirim ke API
+        data = {
+            "nim": nim,
+            "nama": nama,
+            "kelas": self.entry_kelas.get(),
+            "lab": self.entry_lab.get(),
+            "keluhan": keluhan
+        }
 
+        # Kirim ke API PHP
+        try:
+            url = "http://localhost/TUGASAKHIR/web/api/create_report.php"
+            response = requests.post(url, data=data)
+            
+            if response.status_code == 200:
+                res_data = response.json()
+                if res_data['status'] == 'success':
+                    messagebox.showinfo("Berhasil", "Terima kasih atas laporannya!")
+                    self.clear_fields()
+                else:
+                    messagebox.showerror("Gagal", res_data['message'])
+            else:
+                messagebox.showerror("Error", "Gagal terhubung ke server.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Terjadi kesalahan: {e}")
 
-label_nama.place(x=100, y=125)
-label_nim.place(x=100, y=175)
-label_kelas.place(x=100, y=225)
-label_lab.place(x=100, y=275)
-label_keluhan.place(x=100, y=325)
+    def clear_fields(self):
+        self.entry_nama.delete(0, 'end')
+        self.entry_nim.delete(0, 'end')
+        self.entry_keluhan.delete(0, 'end')
 
+    def lihat_data(self):
+        # Arahkan ke folder web/index.php yang baru
+        url = "http://localhost/TUGASAKHIR/web/index.php"
+        webbrowser.open(url)
 
-entry_nama.place(x=200, y=125)
-entry_nim.place(x=200, y=175)
-entry_kelas.place(x=200, y=225)
-entry_lab.place(x=200, y=275)
-entry_keluhan.place(x=200, y=325)
-
-
-# Function
-
-
-def error():
-    messagebox.showerror(title="Halo", message="Anda Harus Mengisi Semua Field!")
-
-def selesai():
-    messagebox.showinfo(title="Halo", message="Terima kasih atas laporannya, akan segera kami tangani")
-
-def clear():
-    entry_nama.delete(0, END)
-    entry_nim.delete(0, END)
-    entry_keluhan.delete(0, END)
-
-def sesuai():
-    nim = entry_nim.get()
-    nama = entry_nama.get()
-    kelas = entry_kelas.get()
-    lab = entry_lab.get()
-    keluhan = entry_keluhan.get()
-
-
-
-    insert_query = "INSERT INTO `datakendala`(`nim`, `nama`, `kelas`, `lab`, `keluhan`) VALUES(%s,%s,%s,%s,%s)"
-    vals = (nim, nama, kelas, lab, keluhan)
-    c.execute(insert_query, vals)
-    connection.commit()
-
-
-def insertData():
-    nim = entry_nim.get()
-    nama = entry_nama.get()
-    kelas = entry_kelas.get()
-    lab = entry_lab.get()
-    keluhan = entry_keluhan.get()
-
-
-    if nim == "":
-        error()
-    elif nama == "":
-        error()
-    elif keluhan == "":
-        error()
-    else:
-        sesuai()
-        selesai()
-        clear()
-
-
-def lihat_data():
-    url = "http://localhost/tugasakhir/Pagination.php"
-    webbrowser.open(url)
-
-
-# Button
-
-button = ctk.CTkButton(root, width=100, text="KIRIM", command=insertData)
-button.place(x=150, y=375)
-
-
-button = ctk.CTkButton(root, width=100, text="LIHAT DATA", command=lihat_data)
-button.place(x=260, y=375)
-
-# memunculkan frame
-
-root.mainloop()
+if __name__ == "__main__":
+    app = App()
+    app.mainloop()
