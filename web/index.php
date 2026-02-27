@@ -77,7 +77,7 @@ try {
     <main class="max-w-7xl mx-auto p-12">
         <div class="flex w-full justify-between">
             <div class=" mb-6 px-4 border-l-4 border-primary">
-                <h2 class="text-2xl font-main font-semibold text-slate-900">Daftar Laporan Kendala Labkom</h2>
+                <h2 class="text-2xl font-main font-semibold text-slate-900">Data Laporan Kendala Labkom</h2>
                 <p class="text-slate-500 font-main text-xs mt-1">Laporan terbaru yang dikirim melalui Labhub desktop Labkom</p>
             </div>
     

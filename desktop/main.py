@@ -2,6 +2,9 @@ import customtkinter as ctk
 from tkinter import messagebox
 import requests
 import webbrowser
+import threading
+import os
+from PIL import Image
 
 # Set tema (Opsional agar lebih modern)
 ctk.set_appearance_mode("dark") 
@@ -9,20 +12,36 @@ ctk.set_default_color_theme("blue")
 
 class App(ctk.CTk):
     def __init__(self):
-        super().__init__()
+        super().__init__()        
+
+        # 1. Tentukan lokasi folder script ini berada (folder 'desktop')
+        basedir = os.path.dirname(__file__)
+        
+        # 2. Gabungkan dengan lokasi file icon
+        icon_path = os.path.join(basedir, "assets", "labhub-favicon.ico")
+        image_path = os.path.join(basedir, "assets", "labhub-logo.png")
 
         # Konfigurasi Window
-        self.title("LABHUB - FASTIKOM")
+        self.title("LabHub - Fastikom")
         self.geometry("500x450")
 
-        # Judul
-        self.title_label = ctk.CTkLabel(self, text="PELAPORAN KENDALA LABKOM", 
-                                        font=ctk.CTkFont(size=18, weight="bold"))
-        self.title_label.pack(padx=10, pady=(40, 30))
+        # Ganti Icon di sini (Gunakan file .ico)
+        self.iconbitmap(icon_path)
+
+        # Tentukan 'size' agar gambar tidak pecah atau terlalu besar (sesuaikan px-nya)
+        self.logo_image = ctk.CTkImage(
+            light_image=Image.open(image_path),
+            dark_image=Image.open(image_path),
+            size=(100, 20) # Sesuaikan (lebar, tinggi) gambar kamu
+        )
+
+        # 3. Tampilkan gambar di dalam Label (Ganti judul lama)
+        self.title_image_label = ctk.CTkLabel(self, image=self.logo_image, text="") 
+        self.title_image_label.pack(padx=10, pady=(40, 30))
 
         # Data Pilihan
-        pilihan_kelas = ["MALAM", "PAGI"]
-        pilihan_lab = ["LAB1", "LAB2"]
+        pilihan_kelas = ["Pagi", "Malam"]
+        pilihan_lab = ["LABKOM-1", "LABKOM-2"]
 
         # Container untuk Form (Agar lebih rapi daripada .place)
         self.form_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -54,13 +73,19 @@ class App(ctk.CTk):
         self.btn_frame.pack(pady=30)
 
         self.btn_kirim = ctk.CTkButton(self.btn_frame, width=120, text="KIRIM", 
+                                       fg_color="#0087f2", border_width=0,
                                        command=self.handle_insert)
         self.btn_kirim.grid(row=0, column=0, padx=10)
 
         self.btn_lihat = ctk.CTkButton(self.btn_frame, width=120, text="LIHAT DATA", 
-                                       fg_color="transparent", border_width=2,
+                                       fg_color="transparent", border_width=1,
                                        command=self.lihat_data)
         self.btn_lihat.grid(row=0, column=1, padx=10)
+
+        # Tambahkan Progress Bar (Animasi Loading) di bawah tombol
+        self.loading_bar = ctk.CTkProgressBar(self, orientation="horizontal", width=300)
+        self.loading_bar.set(0) # Mulai dari 0
+        self.loading_bar.configure(mode="indeterminate") # Animasi bolak-balik
 
     def create_label_entry(self, text, row):
         label = ctk.CTkLabel(self.form_frame, text=text, anchor="w")
@@ -72,23 +97,20 @@ class App(ctk.CTk):
         nim = self.entry_nim.get().strip()
         keluhan = self.entry_keluhan.get().strip()
         
-        # 1. Validasi Field Kosong
+        # --- 1. Validasi Input (Tetap di Main Thread) ---
         if not nama or not nim or not keluhan:
-            messagebox.showerror("Error", "Semua field (Nama, NIM, Keluhan) wajib diisi!")
+            messagebox.showerror("Error", "Semua field wajib diisi !")
             return
 
-        # 2. Validasi Nama (Hanya huruf dan spasi)
-        # Kita hilangkan spasi sementara untuk pengecekan .isalpha()
         if not nama.replace(" ", "").isalpha():
-            messagebox.showerror("Validation Error", "Nama hanya boleh berisi huruf!")
+            messagebox.showerror("Validation Error", "Nama hanya boleh berisi huruf !")
             return
 
-        # 3. Validasi NIM (Hanya angka)
         if not nim.isdigit():
-            messagebox.showerror("Validation Error", "NIM hanya boleh berisi angka!")
+            messagebox.showerror("Validation Error", "NIM hanya boleh berisi angka !")
             return
 
-        # Jika lolos validasi, baru kirim ke API
+        # Siapkan data
         data = {
             "nim": nim,
             "nama": nama,
@@ -97,22 +119,40 @@ class App(ctk.CTk):
             "keluhan": keluhan
         }
 
-        # Kirim ke API PHP
+        # --- 2. Siapkan UI untuk Loading ---
+        self.loading_bar.pack(pady=10)
+        self.loading_bar.start() 
+        self.btn_kirim.configure(state="disabled", text="Mengirim...")
+
+        # --- 3. Jalankan Thread (Hanya Satu Kali) ---
+        # Ini akan memanggil send_data_task di background
+        thread = threading.Thread(target=self.send_data_task, args=(data,))
+        thread.daemon = True # Agar thread mati jika aplikasi ditutup
+        thread.start()
+    
+    def send_data_task(self, data):
+        """Fungsi ini berjalan di background"""
         try:
             url = "http://localhost/TUGASAKHIR/web/api/create_report.php"
-            response = requests.post(url, data=data)
+            response = requests.post(url, data=data, timeout=10)
+            res_data = response.json()
             
-            if response.status_code == 200:
-                res_data = response.json()
-                if res_data['status'] == 'success':
-                    messagebox.showinfo("Berhasil", "Terima kasih atas laporannya!")
-                    self.clear_fields()
-                else:
-                    messagebox.showerror("Gagal", res_data['message'])
-            else:
-                messagebox.showerror("Error", "Gagal terhubung ke server.")
+            # Kembali ke main thread untuk update UI
+            self.after(0, lambda: self.finish_insert(res_data))
         except Exception as e:
-            messagebox.showerror("Error", f"Terjadi kesalahan: {e}")
+            self.after(0, lambda: self.finish_insert({"status": "error", "message": str(e)}))
+    
+    def finish_insert(self, res_data):
+        """Kembali mereset UI setelah selesai"""
+        self.loading_bar.stop()
+        self.loading_bar.pack_forget() # Sembunyikan loading
+        self.btn_kirim.configure(state="normal", text="KIRIM")
+
+        if res_data['status'] == 'success':
+            messagebox.showinfo("Berhasil", "Laporan anda berhasil terkirim!")
+            self.clear_fields()
+        else:
+            messagebox.showerror("Gagal", res_data['message'])
 
     def clear_fields(self):
         self.entry_nama.delete(0, 'end')
